@@ -27,20 +27,78 @@
 //#include <util/delay.h>
 
 #include <avr/io.h>
-//#include <avr/interrupt.h>
+#include <avr/interrupt.h>
 //#include <avr/pgmspace.h>
 //#include <avr/eeprom.h> 
 
 #include <stdint.h>
 
 #include "bitop.h"
+#include "io.h"
+
+using namespace avr_cpp_lib;
+
+static const uint8_t ADDRESS = 0x51;
+
+OutputPin * relays[7];
 
 int main() {
 	// init
 	
+	// i2c
+	TWCR = 0b01000101;
+	TWAR = ADDRESS<<1;
+
+	OutputPin r0(&DDRD, &PORTD, PD6);
+	OutputPin r1(&DDRD, &PORTD, PD5);
+	OutputPin r2(&DDRD, &PORTD, PD4);
+	OutputPin r3(&DDRD, &PORTD, PD3);
+	OutputPin r4(&DDRD, &PORTD, PD2);
+	OutputPin r5(&DDRD, &PORTD, PD1);
+	OutputPin r6(&DDRD, &PORTD, PD0);
+	
+	relays[0] = &r0;
+	relays[1] = &r1;
+	relays[2] = &r2;
+	relays[3] = &r3;
+	relays[4] = &r4;
+	relays[5] = &r5;
+	relays[6] = &r6;
 	
 	// enable interrupts
-	//sei();
+	sei();
 
 	for (;;);
+}
+
+ISR(TWI_vect) {
+	static uint8_t state = 0;
+	static uint8_t command = 0;
+	switch (TWSR) {
+		case 0x60: // SLA+W
+			state = 0;
+			break;
+		case 0x80: // SLA+W + DATA
+			switch (state) {
+				case 0:
+					command = TWDR;
+					break;
+				case 1:
+					uint8_t i = TWDR;
+					if (i < 7) {
+						switch (command) {
+							case 0:
+								relays[i]->clear();
+								break;
+							case 1:
+								relays[i]->set();
+								break;
+						}
+					}	
+					break;
+			}
+			state++;
+			break;
+	}
+	SETBIT(TWCR, TWINT);
 }
